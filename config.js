@@ -9,3 +9,5 @@ export const firebaseConfig = {
 };
 // quem pode liberar e tirar acessos
 export const ADMINS = ["inovaagricolasolucoes@gmail.com"];
+// login com Google sem passar pelo firebaseapp.com
+export const GOOGLE_CLIENT_ID = "190336576417-ogt5shj8be36bb0i331v96gq6hi5pn2c.apps.googleusercontent.com";

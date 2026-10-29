@@ -1,6 +1,6 @@
-const VERSAO = 'ga-app-2026-10-28b';
+const VERSAO = 'ga-app-2026-10-29';
 const CDN = 'ga-cdn-v1';
-const SHELL = ['./', './index.html', './app.js', './config.js', './manifest.webmanifest', './logo0.png', './logo1.png', './logo2.png', './logo-inova.png', './icon-192.png', './icon-512.png'];
+const SHELL = ['./', './index.html', './app.js', './config.js', './manifest.webmanifest', './logo0.png', './logo1.png', './logo2.png', './logo-inova.png', './logo-inova-dark.png', './icon-192.png', './icon-512.png'];
 const CDN_HOSTS = ['www.gstatic.com', 'cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(VERSAO).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith('ga-app-') && k !== VERSAO).map(k => caches.delete(k)))).then(() => self.clients.claim())); });

@@ -1,7 +1,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import { initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithCredential, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import { getFirestore, doc, getDoc, getDocs, setDoc, deleteDoc, collection, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
-import { firebaseConfig, ADMINS } from './config.js';
+import { firebaseConfig, ADMINS, GOOGLE_CLIENT_ID } from './config.js';
 
 const PRAZO = 7 * 24 * 3600 * 1000;          // confere o acesso a cada 7 dias
 const KEY = 'ga_sessao_v1';
@@ -11,7 +11,7 @@ let SESSAO = {};
 let CROP = null, FASES = [], REF_FATOR = 1;
 
 const fb = initializeApp(firebaseConfig);
-const auth = getAuth(fb);
+const auth = initializeAuth(fb, {persistence: [indexedDBLocalPersistence, browserLocalPersistence]});  // sem o iframe do firebaseapp.com
 const db = getFirestore(fb);
 
 // ================= gerador (mesmo código do artefato) =================
@@ -154,7 +154,7 @@ const dataBR = t => new Date(t).toLocaleDateString('pt-BR');
 
 function gate(msg, {login = false, trocar = false} = {}) {
   $('main').hidden = true; $('gate').hidden = false;
-  $('gmsg').textContent = msg; $('login').hidden = !login; $('logout2').hidden = !trocar;
+  $('gmsg').textContent = msg; $('gbtn').hidden = !login; if (login) botaoGoogle(); $('logout2').hidden = !trocar;
 }
 
 async function sincronizar(user) {
@@ -220,18 +220,27 @@ onAuthStateChanged(auth, async user => {
   gate('Conferindo o seu acesso…');
   await verificar(user);
 });
-getRedirectResult(auth).catch(() => {});
-
-$('login').addEventListener('click', async () => {
-  const prov = new GoogleAuthProvider(); prov.setCustomParameters({prompt: 'select_account'});
+// Login com o botão do Google (Google Identity Services): não depende do firebaseapp.com
+let gisPronto = null;
+function carregarGIS() {
+  if (gisPronto) return gisPronto;
+  gisPronto = new Promise((ok, erro) => { const sc = document.createElement('script'); sc.src = 'https://accounts.google.com/gsi/client'; sc.async = true;
+    sc.onload = () => ok(); sc.onerror = () => { gisPronto = null; erro(new Error('gis')); }; document.head.appendChild(sc); });
+  return gisPronto;
+}
+async function botaoGoogle() {
   if (!navigator.onLine) { $('gmsg').textContent = 'Para entrar a primeira vez é preciso internet.'; return; }
-  try { await signInWithPopup(auth, prov); }
-  catch (e) {
-    if (['auth/popup-blocked', 'auth/operation-not-supported-in-this-environment', 'auth/cancelled-popup-request'].includes(e.code)) await signInWithRedirect(auth, prov);
-    else if (e.code !== 'auth/popup-closed-by-user') $('gmsg').textContent = 'Não foi possível entrar. Tente de novo.';
-  }
-});
-const sair = async () => { await apagarTudo(false); await signOut(auth); };
+  try { await carregarGIS(); } catch (e) { $('gmsg').textContent = 'Não foi possível carregar o login do Google. Confira a internet e abra de novo.'; return; }
+  google.accounts.id.initialize({client_id: GOOGLE_CLIENT_ID, auto_select: false, cancel_on_tap_outside: true,
+    callback: async resp => {
+      $('gmsg').textContent = 'Entrando…';
+      try { await signInWithCredential(auth, GoogleAuthProvider.credential(resp.credential)); }
+      catch (e) { $('gmsg').textContent = 'Não foi possível entrar (' + (e.code || e.message) + '). Tente de novo.'; }
+    }});
+  $('gbtn').innerHTML = '';
+  google.accounts.id.renderButton($('gbtn'), {theme: 'filled_blue', size: 'large', text: 'signin_with', shape: 'pill', locale: 'pt-BR', width: 260});
+}
+const sair = async () => { await apagarTudo(false); try { window.google?.accounts?.id?.disableAutoSelect(); } catch (e) {} await signOut(auth); };
 $('logout').addEventListener('click', sair);
 $('logout2').addEventListener('click', sair);
 
