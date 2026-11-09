@@ -25,14 +25,43 @@ const title = s => s.toLowerCase().replace(/(^|\s)\S/g, m => m.toUpperCase());
 function read() {
   const v = id => { const t = String($(id).value).trim().replace(/\s/g, ''); return parseFloat(id === 'qtd' ? t.replace(/[.,]/g, '') : t.replace(',', '.')); };
   return {cli: $('cli').value.trim(), qtd: v('qtd'), eg: v('eg'), ep: v('ep'), vz: v('vz'),
-          adj: $('adj').checked, ec: FASES.map((_, i) => v('ec' + i)),
+          adj: $('adj').checked, exN: $('exN').getAttribute('aria-pressed') === 'true', ec: FASES.map((_, i) => v('ec' + i)),
           sel: [...document.querySelectorAll('.pgck')].filter(c => c.checked).map(c => +c.value)};
+}
+
+
+// ===== Excesso de nitrogênio: tira 30% do N de cada semana, mantendo o K =====
+// 1º corta o MagCal; se não bastar, troca 15-15-15 por 07-12-30 (mesmo K2O); por último corta o 07-12-30.
+const NPCT = n => n.includes('MagCal') ? 13 : n.includes('15-15-15') ? 15 : n.includes('07-12-30') ? 7 : 0;
+const r2 = x => Math.round(x * 100) / 100;
+function cortaN(days, corte = 0.30) {
+  const ds = days.map(d => ({...d, p: d.p.map(q => [...q])}));
+  const all = ds.flatMap(d => d.p);
+  const soma = f => all.filter(q => f(q[0])).reduce((s, q) => s + (q[1] || 0) * NPCT(q[0]) / 100, 0);
+  let falta = corte * soma(n => NPCT(n) > 0);
+  if (falta <= 0) return ds;
+  const nMg = soma(n => n.includes('MagCal'));
+  if (nMg > 0) { const c = Math.min(falta, nMg); all.filter(q => q[0].includes('MagCal')).forEach(q => q[1] = r2((q[1] || 0) * (nMg - c) / nMg)); falta -= c; }
+  const g15 = all.filter(q => q[0].includes('15-15-15')).reduce((s, q) => s + (q[1] || 0), 0);
+  if (falta > 1e-9 && g15 > 0) {
+    const fr = Math.min(1, falta / 0.115 / g15);
+    ds.forEach(d => { const q15 = d.p.find(q => q[0].includes('15-15-15')); if (!q15 || !q15[1]) return;
+      const troca = q15[1] * fr; q15[1] = r2(q15[1] - troca);
+      const q07 = d.p.find(q => q[0].includes('07-12-30'));
+      if (q07) q07[1] = r2((q07[1] || 0) + troca / 2); else d.p.splice(d.p.indexOf(q15), 0, ['HISOL 07-12-30', r2(troca / 2), 1.1]); });
+    falta -= g15 * fr * 0.115;
+  }
+  if (falta > 1e-9) { const n07 = ds.flatMap(d => d.p).filter(q => q[0].includes('07-12-30')).reduce((s, q) => s + (q[1] || 0) * 0.07, 0);
+    if (n07 > 0) ds.flatMap(d => d.p).filter(q => q[0].includes('07-12-30')).forEach(q => q[1] = r2((q[1] || 0) * Math.max(0, n07 - falta) / n07)); }
+  return ds;
 }
 
 function compute(p) {
   const fator = p.ep * p.vz / p.eg;
-  const weeks = CROP.weeks.map(w => { const fi = faseIdx(w.label); return {label: w.label, fi, days: w.days.map(d => {
-    const load = d.p.reduce((s, [, x, f]) => s + (f ? x * f : 0), 0);
+  const weeks = CROP.weeks.map(w => { const fi = faseIdx(w.label); return {label: w.label, fi, days: (p.exN ? cortaN(w.days) : w.days).map((d, di) => {
+    // com excesso de N a água continua a do programa normal; só a EC cai
+    const load = (p.exN ? w.days[di] : d).p.reduce((s, [, x, f]) => s + (f ? x * f : 0), 0);
+    const loadN = d.p.reduce((s, [, x, f]) => s + (f ? x * f : 0), 0);
     const ecF = p.ec[fi] > 0 ? p.ec[fi] : FASES[fi].ec;
     let t = d.t != null ? d.t : Math.max(Math.round(load / (ecF * REF_FATOR) * 60), 1);
     if (p.adj && load > 0) {
@@ -44,7 +73,7 @@ function compute(p) {
     }
     const volL = fator * t / 60;
     const prods = d.p.map(([n, x, f]) => ({n, dose: x, f}));
-    return {d: d.d, t, vol: volL * 1000, ec: load / volL, prods};
+    return {d: d.d, t, vol: volL * 1000, ec: loadN / volL, prods};
   })}; });
   return {fator, weeks};
 }
@@ -254,6 +283,9 @@ setInterval(() => { const c = lerCache(); if (SESSAO.email && (!c || Date.now() 
 $('crop').addEventListener('change', () => { buildCrop(); update(); });
 window.addEventListener('resize', fit);
 ['cli','qtd','eg','ep','vz'].forEach(id => $(id).addEventListener('input', update));
+$('exN').addEventListener('click', () => { const on = $('exN').getAttribute('aria-pressed') !== 'true';
+  $('exN').setAttribute('aria-pressed', on); $('exN').textContent = on ? 'Excesso de nitrogênio · ligado (−30% N)' : 'Excesso de nitrogênio';
+  $('exNote').textContent = on ? 'Programa recalculado com 30% menos N, mesma água e EC menor. Toque de novo para voltar ao normal.' : 'Toque para recalcular o programa com 30% menos N, mantendo o potássio.'; update(); });
 $('adj').addEventListener('change', () => { FASES.forEach((_, i) => $('ec' + i).disabled = !$('adj').checked); update(); });
 document.fonts && document.fonts.ready.then(fit);
 

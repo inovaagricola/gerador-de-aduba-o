@@ -1,4 +1,4 @@
-const VERSAO = 'ga-app-2026-10-29';
+const VERSAO = 'ga-app-2026-11-09';
 const CDN = 'ga-cdn-v1';
 const SHELL = ['./', './index.html', './app.js', './config.js', './manifest.webmanifest', './logo0.png', './logo1.png', './logo2.png', './logo-inova.png', './logo-inova-dark.png', './icon-192.png', './icon-512.png'];
 const CDN_HOSTS = ['www.gstatic.com', 'cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];

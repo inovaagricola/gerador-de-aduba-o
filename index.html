@@ -55,6 +55,9 @@ input:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline
 .stat span{font-size:11px;color:var(--muted);letter-spacing:.4px}
 button.go{font:700 16px var(--font-ui);background:var(--accent);color:var(--accent-fg);border:0;border-radius:8px;padding:13px 16px;cursor:pointer}
 button.go:disabled{opacity:.55;cursor:progress}
+button.exn{font:700 15px var(--font-ui);background:transparent;color:var(--warn);border:2px solid var(--warn);border-radius:8px;padding:11px 14px;cursor:pointer;width:100%}
+button.exn[aria-pressed="true"]{background:var(--warn);color:#fff}
+.exnote{font-size:12.5px;color:var(--muted);margin:-8px 0 0;line-height:1.4}
 .msg{font-size:13px;color:var(--muted);min-height:1.2em}
 .msg.err{color:var(--warn)}
 .note{font-size:12px;color:var(--muted);line-height:1.45}
@@ -146,7 +149,7 @@ button.go:disabled{opacity:.55;cursor:progress}
     <p id="gmsg">Carregando…</p>
     <div id="gbtn" hidden></div>
     <button id="logout2" hidden>Sair e entrar com outra conta</button>
-    <p class="small">Versão 2026-10-29</p>
+    <p class="small">Versão 2026-11-09</p>
   </div>
 </div>
 <div id="main" hidden>
@@ -169,6 +172,9 @@ button.go:disabled{opacity:.55;cursor:progress}
     <div class="sec">EC por fase</div>
     <label class="chk" for="adj"><input type="checkbox" id="adj" checked><span>Ajustar o tempo de irrigação (água por planta) para chegar na EC da fase. As doses dos adubos não mudam.</span></label>
     <div class="ph" id="phs"></div>
+    <div class="sec">Nitrogênio</div>
+    <button type="button" class="exn" id="exN" aria-pressed="false">Excesso de nitrogênio</button>
+    <p class="exnote" id="exNote">Toque para recalcular o programa com 30% menos N, mantendo o potássio.</p>
     <div class="sec">Folhas para o cliente</div>
     <div class="pgsel" id="pgs"></div>
     <div class="summary">
