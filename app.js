@@ -25,28 +25,13 @@ const title = s => s.toLowerCase().replace(/(^|\s)\S/g, m => m.toUpperCase());
 function read() {
   const v = id => { const t = String($(id).value).trim().replace(/\s/g, ''); return parseFloat(id === 'qtd' ? t.replace(/[.,]/g, '') : t.replace(',', '.')); };
   return {cli: $('cli').value.trim(), qtd: v('qtd'), eg: v('eg'), ep: v('ep'), vz: v('vz'),
-          adj: $('adj').checked, exN: $('exN').getAttribute('aria-pressed') === 'true', ec: FASES.map((_, i) => v('ec' + i)),
+          adj: $('adj').checked, ec: FASES.map((_, i) => v('ec' + i)),
           sel: [...document.querySelectorAll('.pgck')].filter(c => c.checked).map(c => +c.value)};
-}
-
-
-// ===== Excesso de nitrogênio: tira 30% do N de cada semana cortando só o MagCal =====
-// Se o MagCal da semana não tiver N suficiente, ele é zerado e o corte fica menor que 30%.
-const NPCT = n => n.includes('MagCal') ? 13 : n.includes('15-15-15') ? 15 : n.includes('07-12-30') ? 7 : 0;
-const r2 = x => Math.round(x * 100) / 100;
-function cortaN(days, corte = 0.30) {
-  const ds = days.map(d => ({...d, p: d.p.map(q => [...q])}));
-  const all = ds.flatMap(d => d.p);
-  const soma = f => all.filter(q => f(q[0])).reduce((s, q) => s + (q[1] || 0) * NPCT(q[0]) / 100, 0);
-  const falta = corte * soma(n => NPCT(n) > 0);
-  const nMg = soma(n => n.includes('MagCal'));
-  if (falta > 0 && nMg > 0) { const c = Math.min(falta, nMg); all.filter(q => q[0].includes('MagCal')).forEach(q => q[1] = r2((q[1] || 0) * (nMg - c) / nMg)); }
-  return ds;
 }
 
 function compute(p) {
   const fator = p.ep * p.vz / p.eg;
-  const weeks = CROP.weeks.map(w => { const fi = faseIdx(w.label); return {label: w.label, fi, days: (p.exN ? cortaN(w.days) : w.days).map(d => {
+  const weeks = CROP.weeks.map(w => { const fi = faseIdx(w.label); let lastT = null; return {label: w.label, fi, days: w.days.map(d => {
     const load = d.p.reduce((s, [, x, f]) => s + (f ? x * f : 0), 0);
     const ecF = p.ec[fi] > 0 ? p.ec[fi] : FASES[fi].ec;
     let t = d.t != null ? d.t : Math.max(Math.round(load / (ecF * REF_FATOR) * 60), 1);
@@ -57,6 +42,7 @@ function compute(p) {
     }
     if (d.tfix != null) { t = d.tfix;
     }
+    if (load === 0 && lastT != null) t = lastT; else if (load > 0) lastT = t;  // dia sem adubo: mesma água do dia anterior
     const volL = fator * t / 60;
     const prods = d.p.map(([n, x, f]) => ({n, dose: x, f}));
     return {d: d.d, t, vol: volL * 1000, ec: load / volL, prods};
@@ -95,7 +81,7 @@ function pages(p, r) {
         const d = w.days[j];
         const h = 18 + 14 + n * 17;
         if (!d) return `<div class="day" style="height:${h}px"></div>`;
-        return `<div class="day" style="height:${h}px"><div class="dh"><b>${esc(d.d.toUpperCase())}</b><b style="color:var(--pT)">EC ${nf(d.ec,2)}</b></div>
+        return `<div class="day" style="height:${h}px"><div class="dh"><b>${esc(d.d.toUpperCase())}</b><b style="color:var(--pT)">${d.ec > 0 ? 'EC ' + nf(d.ec,2) : 'sem adubo'}</b></div>
           <div class="irr">Irrigação: ${nf(d.t,0)} min · ${nf(d.vol,0)} ml/planta</div>` +
           d.prods.map(q => `<div class="row"><span>${esc(q.n)}</span><span class="n">${cell(q.dose,2)}</span><span class="k">${cell(q.dose * p.qtd / 1000,1)}</span></div>`).join('') + `</div>`;
       }).join('') + `</div>`).join('') + `</div>`;
@@ -269,9 +255,6 @@ setInterval(() => { const c = lerCache(); if (SESSAO.email && (!c || Date.now() 
 $('crop').addEventListener('change', () => { buildCrop(); update(); });
 window.addEventListener('resize', fit);
 ['cli','qtd','eg','ep','vz'].forEach(id => $(id).addEventListener('input', update));
-$('exN').addEventListener('click', () => { const on = $('exN').getAttribute('aria-pressed') !== 'true';
-  $('exN').setAttribute('aria-pressed', on); $('exN').textContent = on ? 'Excesso de nitrogênio · ligado (−30% N)' : 'Excesso de nitrogênio';
-  $('exNote').textContent = on ? 'Programa recalculado com 30% menos N (só no MagCal). O tempo de irrigação muda para manter a EC da fase. Toque de novo para voltar ao normal.' : 'Toque para recalcular o programa com 30% menos N, mantendo o potássio.'; update(); });
 $('adj').addEventListener('change', () => { FASES.forEach((_, i) => $('ec' + i).disabled = !$('adj').checked); update(); });
 document.fonts && document.fonts.ready.then(fit);
 
