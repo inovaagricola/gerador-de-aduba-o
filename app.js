@@ -25,7 +25,7 @@ const title = s => s.toLowerCase().replace(/(^|\s)\S/g, m => m.toUpperCase());
 function read() {
   const v = id => { const t = String($(id).value).trim().replace(/\s/g, ''); return parseFloat(id === 'qtd' ? t.replace(/[.,]/g, '') : t.replace(',', '.')); };
   return {cli: $('cli').value.trim(), qtd: v('qtd'), eg: v('eg'), ep: v('ep'), vz: v('vz'),
-          adj: $('adj').checked, exN: $('exN').getAttribute('aria-pressed') === 'true', ec: FASES.map((_, i) => v('ec' + i)),
+          adj: $('adj').checked, exN: $('exN').getAttribute('aria-pressed') === 'true', sem15: tem15() && $('s15').getAttribute('aria-pressed') !== 'true', ec: FASES.map((_, i) => v('ec' + i)),
           sel: [...document.querySelectorAll('.pgck')].filter(c => c.checked).map(c => +c.value)};
 }
 
@@ -44,9 +44,26 @@ function cortaN(days, corte = 0.30) {
   return ds;
 }
 
+// ===== Sem 15-15-15: tira o 15-15-15 da semana e repõe K2O com 07-12-30 e N com MagCal =====
+// Para cada 1 g de 15-15-15: +0,5 g de 07-12-30 (repõe o K2O) e +0,885 g de MagCal (repõe o N que falta).
+const tem15 = () => !!CROP && CROP.weeks.some(w => w.days.some(d => d.p.some(q => q[0].includes('15-15-15') && q[1] > 0)));
+function tira15(days, label) {
+  const ds = days.map(d => ({...d, p: d.p.map(q => [...q])}));
+  const all = ds.flatMap(d => d.p);
+  const f = all.filter(q => q[0].includes('15-15-15')).reduce((s, q) => s + (q[1] || 0), 0);
+  const q7 = all.filter(q => q[0].includes('07-12-30')), qm = all.filter(q => q[0].includes('MagCal'));
+  if (!f || !q7.length || !qm.length) return days;
+  q7.forEach(q => q[1] = r2((q[1] || 0) + 0.5 * f / q7.length));
+  qm.forEach(q => q[1] = r2((q[1] || 0) + 0.885 * f / qm.length));
+  ds.forEach(d => d.p = d.p.filter(q => !q[0].includes('15-15-15')));
+  const aj = (CROP.s15 || {})[label];   // subida suave: dose por aplicação definida na cultura
+  if (aj) all.forEach(q => { if (aj[q[0]] != null) q[1] = aj[q[0]]; });
+  return ds;
+}
+
 function compute(p) {
   const fator = p.ep * p.vz / p.eg;
-  const weeks = CROP.weeks.map(w => { const fi = faseIdx(w.label); let lastT = null; return {label: w.label, fi, days: (p.exN ? cortaN(w.days) : w.days).map(d => {
+  const weeks = CROP.weeks.map(w => { const fi = faseIdx(w.label); let lastT = null; return {label: w.label, fi, days: (wd => p.exN ? cortaN(wd) : wd)(p.sem15 ? tira15(w.days, w.label) : w.days).map(d => {
     const load = d.p.reduce((s, [, x, f]) => s + (f ? x * f : 0), 0);
     const ecF = p.ec[fi] > 0 ? p.ec[fi] : FASES[fi].ec;
     let t = d.t != null ? d.t : Math.max(Math.round(load / (ecF * REF_FATOR) * 60), 1);
@@ -147,6 +164,7 @@ function buildCrop() {
   const bioEnd = parseInt(CROP.bio[CROP.bio.length - 1].label);
   $('phs').innerHTML = FASES.map((f, i) => `<label class="nm" for="ec${i}">${f.n}<small>${f.d0} a ${f.d1} dias${f.d1 <= bioEnd + 7 && i === 0 ? ' · só bioestimulantes' : ''}</small></label><input type="text" id="ec${i}" inputmode="decimal" value="${nf(f.ec, 1)}" aria-label="EC ${f.n} em mS/cm"${$('adj').checked ? '' : ' disabled'}>`).join('');
   FASES.forEach((_, i) => $('ec' + i).addEventListener('input', update));
+  $('b15').hidden = !tem15();
   const nPg = Math.ceil(CROP.weeks.length / 4);
   const lab = i => { const ws = CROP.weeks.slice(i * 4, i * 4 + 4); const fis = [...new Set(ws.map(w => faseIdx(w.label)))];
     return `Folha ${i + 1} · ${parseInt(ws[0].label)} a ${parseInt(ws[ws.length - 1].label)} dias · ${fis.map(k => FASES[k].n).join(' / ')}${i === 0 ? ' + bioestimulantes' : ''}`; };
@@ -273,6 +291,9 @@ window.addEventListener('resize', fit);
 $('exN').addEventListener('click', () => { const on = $('exN').getAttribute('aria-pressed') !== 'true';
   $('exN').setAttribute('aria-pressed', on); $('exN').textContent = on ? 'Excesso de nitrogênio · ligado (−30% N)' : 'Excesso de nitrogênio';
   $('exNote').textContent = on ? 'Programa recalculado com 30% menos N (só no MagCal). O tempo de irrigação muda para manter a EC da fase. Toque de novo para voltar ao normal.' : 'Toque para recalcular o programa com 30% menos N, mantendo o potássio.'; update(); });
+$('s15').addEventListener('click', () => { const on = $('s15').getAttribute('aria-pressed') !== 'true';
+  $('s15').setAttribute('aria-pressed', on); $('s15').textContent = on ? 'Com 15-15-15 · ligado' : 'Com 15-15-15';
+  $('s15Note').textContent = on ? 'Programa com 15-15-15. Toque de novo para voltar ao programa sem 15-15-15.' : 'O programa sai sem 15-15-15 (K2O reposto com 07-12-30 e N com MagCal). Toque para usar o 15-15-15.'; update(); });
 $('adj').addEventListener('change', () => { FASES.forEach((_, i) => $('ec' + i).disabled = !$('adj').checked); update(); });
 document.fonts && document.fonts.ready.then(fit);
 
